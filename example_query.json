@@ -1,0 +1,24 @@
+{
+  "measures": [
+    "Vendors.totalRevenue",
+    "Vendors.totalOrders",
+    "Vendors.totalPageviews",
+    "Vendors.totalItemsSold"
+  ],
+  "timeDimensions": [],
+  "order": {
+    "Vendors.totalRevenue": "desc"
+  },
+  "dimensions": [
+    "Vendors.name"
+  ],
+  "filters": [
+    {
+      "member": "Vendors.id",
+      "operator": "equals",
+      "values": [
+        "24"
+      ]
+    }
+  ]
+}
