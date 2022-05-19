@@ -2,7 +2,6 @@ cube(`Vendors`, {
   refreshKey: {
     every: `1 second`
   },
-
   sql: `SELECT * FROM public.agg_vendors_minute`,
   measures: {
     count: {
@@ -30,7 +29,7 @@ cube(`Vendors`, {
       type: `number`,
       sql: `SUM(orders)/SUM(pageviews)+1`,
       format: `percent`
-    },
+    }
   },
   dimensions: {
     id: {
@@ -47,4 +46,13 @@ cube(`Vendors`, {
     }
   },
   dataSource: `default`,
+  preAggregations: {
+    main: {
+      measures: [Vendors.totalRevenue, Vendors.totalOrders, Vendors.totalPageviews, Vendors.totalItemsSold],
+      dimensions: [Vendors.name, Vendors.id, Vendors.receivedAtMinute],
+      refreshKey: {
+        every: `1 day`,
+      }
+    }
+  }
 });

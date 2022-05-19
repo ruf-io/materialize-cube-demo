@@ -37,3 +37,14 @@ You'll need to have [docker and docker-compose installed](https://materialize.co
    ```shell session
    psql -h localhost -p 6875 -U materialize -f materialize/create.sql
    ```
+
+5. There is a basic cube schema already drafted for a "Vendors" aggregation in `cube/schema/Vendors.js`
+   a. Test out building a query with it in the Cube.JS Dev Playground at `localhost:4000`
+
+   b. Test curling the query to see how the REST API works
+
+   c. You can test the GraphQL API using the dev playground
+
+   d. Test adding Auth to limit what data each vendor can read.
+
+   e. Try adding a pre-aggregation with a `1 second` cache expiration. This effectively tells Cube Store to cache the view on every query, if Materialize goes down it will continue to serve the last state of the view!

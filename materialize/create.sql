@@ -53,7 +53,7 @@ CREATE MATERIALIZED VIEW agg_vendors_minute AS
     SELECT
         vendors.id as vendor_id,
         vendors.name as vendor_name,
-        minute_series.m,
+        minute_series.m::timestamp,
         SUM(purchases.quantity) as items_sold,
         COUNT(purchases.id) as orders,
         SUM(purchases.purchase_price) as revenue,
