@@ -4,7 +4,7 @@
 
 This is a quick proof-of-concept of how [Cube](https://cube.dev/) integrates with [Materialize]()
 
-- **Materialize** is a streaming database that
+- **Materialize** is a streaming database that maintains the results of queries incrementally, giving you views of your data that are always up to date.
 - **Cube** is a "headless BI" service that connects to databases or data warehouses and handles Data Modeling, Access Control, Caching and APIs
 
 ## Starting Up
