@@ -1,5 +1,9 @@
 -- CREATE SOURCES
 
+CREATE SOURCE json_pageviews
+FROM KAFKA BROKER 'redpanda:9092' TOPIC 'pageviews'
+FORMAT BYTES;
+
 CREATE SOURCE purchases
 FROM KAFKA BROKER 'redpanda:9092' TOPIC 'mysql.shop.purchases'
 FORMAT AVRO USING CONFLUENT SCHEMA REGISTRY 'http://redpanda:8081'
@@ -15,11 +19,10 @@ FROM KAFKA BROKER 'redpanda:9092' TOPIC 'mysql.shop.users'
 FORMAT AVRO USING CONFLUENT SCHEMA REGISTRY 'http://redpanda:8081'
 ENVELOPE DEBEZIUM;
 
-CREATE SOURCE json_pageviews
-FROM KAFKA BROKER 'redpanda:9092' TOPIC 'pageviews'
-FORMAT BYTES;
-
-
+CREATE SOURCE vendors
+FROM KAFKA BROKER 'redpanda:9092' TOPIC 'mysql.shop.vendors'
+FORMAT AVRO USING CONFLUENT SCHEMA REGISTRY 'http://redpanda:8081'
+ENVELOPE DEBEZIUM;
 
 -- CREATE NON-MATERIALIZED VIEW TO PARSE JSON PAGEVIEWS
 
@@ -27,7 +30,8 @@ CREATE VIEW pageview_stg AS
     SELECT
         *,
         regexp_match(url, '/(products|profiles)/')[1] AS pageview_type,
-        (regexp_match(url, '/(?:products|profiles)/(\d+)')[1])::INT AS target_id
+        (regexp_match(url, '/(?:products|profiles)/(\d+)')[1])::INT AS target_id,
+        to_timestamp(received_at) as received_at_ts
     FROM (
         SELECT
             (data->'user_id')::INT AS user_id,
@@ -43,94 +47,22 @@ CREATE VIEW pageview_stg AS
         )
     );
 
+-- CREATE AN ANALYTICAL AGGREGATION FOR VENDORS
 
--- CREATE ANALYTICAL VIEWS
-
-CREATE VIEW purchases_by_item AS
-     SELECT
-         item_id,
-         SUM(purchase_price) as revenue,
-         COUNT(id) AS orders,
-         SUM(quantity) AS items_sold
-     FROM purchases GROUP BY 1;
-
-CREATE VIEW pageviews_by_item AS
+CREATE MATERIALIZED VIEW agg_vendors_minute AS
     SELECT
-        target_id as item_id,
-        COUNT(*) AS pageviews
-    FROM pageview_stg
-    WHERE pageview_type = 'products'
-    GROUP BY 1;
-
-CREATE VIEW purchases_by_item_last_hour AS
-     SELECT
-         item_id,
-         SUM(purchase_price) as revenue,
-         COUNT(id) AS orders,
-         SUM(quantity) AS items_sold
-     FROM purchases
-     WHERE mz_logical_timestamp() < (extract(epoch from created_at)*1000 + 3600000)::numeric
-     GROUP BY 1;
-
-CREATE VIEW pageviews_by_item_last_hour AS
-    SELECT
-        target_id as item_id,
-        COUNT(*) AS pageviews
-    FROM pageview_stg
-    WHERE pageview_type = 'products' AND mz_logical_timestamp() < (received_at*1000 + 3600000)::numeric
-    GROUP BY 1;
-
-  CREATE MATERIALIZED VIEW item_summary AS
-    SELECT
-        items.id as item_id,
-        items.name,
-        items.category,
-        SUM(purchases_by_item.items_sold) as items_sold,
-        SUM(purchases_by_item.orders) as orders,
-        SUM(purchases_by_item.revenue) as revenue,
-        SUM(pageviews_by_item.pageviews) as pageviews,
-        SUM(purchases_by_item_last_hour.orders) as last_hour_orders,
-        SUM(pageviews_by_item_last_hour.pageviews) as last_hour_pageviews
-    FROM items
-    JOIN purchases_by_item ON purchases_by_item.item_id = items.id
-    JOIN pageviews_by_item ON pageviews_by_item.item_id = items.id
-    JOIN purchases_by_item_last_hour ON purchases_by_item_last_hour.item_id = items.id
-    JOIN pageviews_by_item_last_hour ON pageviews_by_item_last_hour.item_id = items.id
+        vendors.id as vendor_id,
+        vendors.name as vendor_name,
+        minute_series.m,
+        SUM(purchases.quantity) as items_sold,
+        COUNT(purchases.id) as orders,
+        SUM(purchases.purchase_price) as revenue,
+        COUNT(pageview_stg.url) as pageviews
+    FROM vendors
+    JOIN items ON items.vendor_id = vendors.id
+    JOIN (
+        SELECT generate_series('2022-05-19 00:00:00', '2022-05-20 00:00:00', '1 MINUTE') as m
+    ) minute_series ON true
+    LEFT JOIN purchases ON purchases.item_id = items.id AND date_trunc('minute', purchases.created_at) = minute_series.m
+    LEFT JOIN pageview_stg ON pageview_stg.target_id = items.id AND pageview_stg.pageview_type = 'products' AND date_trunc('minute', pageview_stg.received_at_ts) = minute_series.m
     GROUP BY 1, 2, 3;
-
-
--- CREATE USER-FACING ANALYTICS VIEWS
-
-CREATE MATERIALIZED VIEW profile_views_per_minute_last_10 AS
-    SELECT
-    target_id as user_id,
-    date_trunc('minute', to_timestamp(received_at)) as received_at_minute,
-    COUNT(*) as pageviews
-    FROM pageview_stg
-    WHERE
-      pageview_type = 'profiles' AND
-      mz_logical_timestamp() < (received_at*1000 + 600000)::numeric
-    GROUP BY 1, 2;
-
-CREATE MATERIALIZED VIEW profile_views AS
-    SELECT
-        target_id AS owner_id,
-        user_id AS viewer_id,
-        received_at AS received_at
-    FROM (SELECT DISTINCT target_id FROM pageview_stg) grp,
-    LATERAL (
-        SELECT user_id, received_at FROM pageview_stg
-        WHERE target_id = grp.target_id
-        ORDER BY received_at DESC LIMIT 10
-    );
-
-CREATE MATERIALIZED VIEW profile_views_enriched AS
-    SELECT
-        owner.id as owner_id,
-        owner.email as owner_email,
-        viewers.id as viewer_id,
-        viewers.email as viewer_email,
-        profile_views.received_at
-    FROM profile_views
-    JOIN users owner ON profile_views.owner_id = owner.id
-    JOIN users viewers ON profile_views.viewer_id = viewers.id;

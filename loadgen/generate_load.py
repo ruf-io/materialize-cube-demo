@@ -9,9 +9,10 @@ from kafka import KafkaProducer
 from mysql.connector import Error, connect
 
 # CONFIG
+vendorSeedCount = 100
 userSeedCount = 10000
 itemSeedCount = 1000
-purchaseGenCount = 500000
+purchaseGenCount = 5000000
 purchaseGenEveryMS = 100
 pageviewMultiplier = 75  # Translates to 75x purchases, currently 750/sec or 65M/day
 itemInventoryMin = 1000
@@ -22,24 +23,23 @@ mysqlHost = "mysql"
 mysqlPort = "3306"
 mysqlUser = "mysqluser"
 mysqlPass = "mysqlpw"
-kafkaHostPort = os.getenv("KAFKA_ADDR", "kafka:9092")
+kafkaHostPort = os.getenv("KAFKA_ADDR", "redpanda:9092")
 kafkaTopic = "pageviews"
 debeziumHostPort = "debezium:8083"
 channels = ["organic search", "paid search", "referral", "social", "display"]
 categories = ["widgets", "gadgets", "doodads", "clearance"]
 
 # INSERT TEMPLATES
-item_insert = "INSERT INTO shop.items (name, category, price, inventory) VALUES ( %s, %s, %s, %s )"
+vendor_insert = "INSERT INTO shop.vendors (name) VALUES ( %s )"
+item_insert = "INSERT INTO shop.items (vendor_id, name, category, price, inventory) VALUES ( %s, %s, %s, %s, %s )"
 user_insert = "INSERT INTO shop.users (email, is_vip) VALUES ( %s, %s )"
 purchase_insert = "INSERT INTO shop.purchases (user_id, item_id, quantity, purchase_price) VALUES ( %s, %s, %s, %s )"
-
 
 # Initialize Kafka
 producer = KafkaProducer(
     bootstrap_servers=[kafkaHostPort],
     value_serializer=lambda x: json.dumps(x).encode("utf-8"),
 )
-
 
 def generatePageview(viewer_id, target_id, page_type):
     return {
@@ -58,10 +58,22 @@ try:
     ) as connection:
         with connection.cursor() as cursor:
             print("Seeding data...")
+            print(" - Vendors")
+            cursor.executemany(
+                vendor_insert,
+                [
+                    (
+                        [barnum.create_company_name()]
+                    )
+                    for i in range(vendorSeedCount)
+                ],
+            )
+            print(" - Items")
             cursor.executemany(
                 item_insert,
                 [
                     (
+                        random.randint(1, vendorSeedCount),
                         barnum.create_nouns(),
                         random.choice(categories),
                         random.randint(itemPriceMin * 100, itemPriceMax * 100) / 100,
