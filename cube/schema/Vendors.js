@@ -46,13 +46,15 @@ cube(`Vendors`, {
     }
   },
   dataSource: `default`,
+  /**
   preAggregations: {
     main: {
       measures: [Vendors.totalRevenue, Vendors.totalOrders, Vendors.totalPageviews, Vendors.totalItemsSold],
       dimensions: [Vendors.name, Vendors.id, Vendors.receivedAtMinute],
       refreshKey: {
-        every: `1 day`,
+        every: `1 second`,
       }
     }
   }
+  */
 });
