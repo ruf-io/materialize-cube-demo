@@ -32,13 +32,18 @@ You'll need to have [docker and docker-compose installed](https://materialize.co
    docker-compose ps
    ```
 
-4. Initialize the Materialize Schema
+4. Initialize the Materialize Schema (you can view it at [`materialize/create.sql`](https://github.com/ruf-io/materialize-cube-demo/blob/main/materialize/create.sql))
 
    ```shell session
    psql -h localhost -p 6875 -U materialize -f materialize/create.sql
    ```
 
 5. There is a basic cube schema already drafted for a "Vendors" aggregation in [`cube/schema/Vendors.js`](https://github.com/ruf-io/materialize-cube-demo/blob/main/cube/schema/Vendors.js)
+
+   The most important customization we are making to the schema is: https://github.com/ruf-io/materialize-cube-demo/blob/90e7f9b39bc210ec8e7180d0359f263f27747fd5/cube/schema/Vendors.js#L2-L4
+
+   This tells Cube to (almost) always go back to Materialize for updates, instead of caching results like it would for a normal DB.
+
    a. Test out building a query with it in the Cube.JS Dev Playground at `localhost:4000`
 
    b. Test curling the query to see how the REST API works, the REST API uses a JSON schema that is demonstrated in the UI (see JSON Query tab):
@@ -75,8 +80,10 @@ You'll need to have [docker and docker-compose installed](https://materialize.co
    curl localhost:4000/cubejs-api/v1/load -G -s --data-urlencode "query=$(cat example_query.json)" | jq '.data'
    ```
 
-   c. You can test the GraphQL API using the dev playground
+   c. You can test the [GraphQL API]() using the dev playground
 
-   d. Test adding Auth to limit what data each vendor can read.
+   d. Test adding [Auth](https://cube.dev/docs/security) to limit what rows each vendor can read.
 
    e. Try adding a pre-aggregation with a `1 second` cache expiration. This effectively tells Cube Store to cache the view on every query, if Materialize goes down it will continue to serve the last state of the view!
+
+   You can either create a pre-aggregation in the playground UI, or just uncomment the existing one here: https://github.com/ruf-io/materialize-cube-demo/blob/90e7f9b39bc210ec8e7180d0359f263f27747fd5/cube/schema/Vendors.js#L49-L59
